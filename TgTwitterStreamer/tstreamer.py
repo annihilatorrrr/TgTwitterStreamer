@@ -81,7 +81,7 @@ class TgStreamer(AsyncStream):
             not Var.TRACK_WORDS
             and Var.TRACK_USERS
             and not Var.TAKE_OTHERS_REPLY
-            and not user["id_str"] in TRACK_IDS
+            and user["id_str"] not in TRACK_IDS
         ):
             return
 
@@ -102,21 +102,16 @@ class TgStreamer(AsyncStream):
         for media in (entities, extended_entities, extended_tweet):
             urls = self.get_urls(media)
             all_urls.update(set(urls))
-        for pik in all_urls:
-            pic.append(pik)
+        pic.extend(iter(all_urls))
         if _entities and _entities.get("hashtags"):
             hashtags = "".join(f"#{a['text']} " for a in _entities["hashtags"])
         content = tweet.get("extended_tweet", {}).get("full_text")
 
         username = user["screen_name"]
-        sender_url = "https://twitter.com/" + username
+        sender_url = f"https://twitter.com/{username}"
         TWEET_LINK = f"{sender_url}/status/{tweet['id']}"
 
-        if content and (len(content) < 1000):
-            text = content
-        else:
-            text = tweet["text"]
-
+        text = content if content and (len(content) < 1000) else tweet["text"]
         # Clear unexpected tags with html.unescape()
         text = unescape(text)
 
@@ -148,7 +143,7 @@ class TgStreamer(AsyncStream):
         try:
             text = Var.CUSTOM_TEXT.format(
                 SENDER=user["name"],
-                SENDER_USERNAME="@" + username,
+                SENDER_USERNAME=f"@{username}",
                 TWEET_TEXT=text,
                 TWEET_LINK=TWEET_LINK,
                 SENDER_PROFILE=sender_url,
@@ -157,13 +152,14 @@ class TgStreamer(AsyncStream):
                 HASHTAGS=hashtags,
                 BOT_USERNAME=Client.SELF.username,
             )
+
         except KeyError:
             LOGGER.error("Your 'CUSTOM_TEXT' seems to be wrong!\nPlease Correct It!")
             Var.CUSTOM_TEXT = CUSTOM_FORMAT
             Client.parse_mode = "html"
             text = CUSTOM_FORMAT.format(
                 SENDER=user["name"],
-                SENDER_USERNAME="@" + username,
+                SENDER_USERNAME=f"@{username}",
                 TWEET_TEXT=text,
                 TWEET_LINK=TWEET_LINK,
                 SENDER_PROFILE=sender_url,
@@ -172,7 +168,8 @@ class TgStreamer(AsyncStream):
                 HASHTAGS=hashtags,
                 BOT_USERNAME=Client.SELF.username,
             )
-        if pic == []:
+
+        if not pic:
             pic = None
 
         button, MSG = None, None
@@ -183,7 +180,7 @@ class TgStreamer(AsyncStream):
         elif not Var.DISABLE_BUTTON:
             button = Button.url(text=Var.BUTTON_TITLE, url=TWEET_LINK)
 
-        is_pic_alone = bool(not pic or len(pic) == 1)
+        is_pic_alone = not pic or len(pic) == 1
         _photos = pic[0] if (pic and is_pic_alone) else pic
         if _photos == []:
             _photos = None
@@ -240,7 +237,7 @@ class TgStreamer(AsyncStream):
             self._do_retweet(tweet["id"])
 
         if Var.AUTO_PIN and MSG:
-            single_msg = MSG if not isinstance(MSG, list) else MSG[0]
+            single_msg = MSG[0] if isinstance(MSG, list) else MSG
             await self._pin(single_msg)
 
     async def on_request_error(self, status_code):
